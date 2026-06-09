@@ -322,20 +322,20 @@ class GameScreen(Screen):
         self.word_queue = self.build_weighted_queue()
         self.current_word = None
         self.consecutive_wrong = 0
-        self.total_wrong = 0
+        self.stars_lost = 0
+        self.star_lost_words = set()
         self.total_correct = 0
         self.lesson_complete = False
         self.timer_event = None
         self.time_left = 40
         self.input_txt.disabled = False
-        self.star_lost_words = set()
         self.update_hp()
         self.update_score()
         self.next_word()
 
     def update_hp(self):
-        remaining = 3 - self.total_wrong
-        self.hp_lbl.text = '*' * remaining + '-' * (3 - remaining)
+        remaining = 3 - self.stars_lost
+        self.hp_lbl.text = '\u25cf' * remaining + '\u25cb' * (3 - remaining)
         if remaining == 0:
             self.hp_lbl.color = C_RED
         elif remaining <= 1:
@@ -437,10 +437,12 @@ class GameScreen(Screen):
     def on_wrong(self):
         self.consecutive_wrong += 1
         word_text = self.current_word.word
+
         if word_text not in self.star_lost_words:
             self.star_lost_words.add(word_text)
-            self.total_wrong += 1
+            self.stars_lost += 1
             self.update_hp()
+
         record_wrong_attempt(self.data, self.book_id, self.lesson_num, word_text)
         self.stop_timer()
 
@@ -448,23 +450,34 @@ class GameScreen(Screen):
             self.phonetic_lbl.text = self.current_word.phonetic
             self.phonetic_lbl.opacity = 1
             self.feedback_lbl.text = '再想想！看音标提示'
-        else:
-            self.feedback_lbl.text = f'不正确(连续错{self.consecutive_wrong}次)'
+            self.input_txt.text = ''
+            self.input_txt.focus = True
+            self.start_timer()
+            return
 
-        if self.consecutive_wrong >= 3:
-            add_wrong_word(self.data, self.book_id, self.lesson_num,
-                          word_text, self.current_word.phonetic, self.current_word.chinese)
-            add_to_review_queue(self.data, self.book_id, self.lesson_num,
-                               word_text, self.current_word.phonetic, self.current_word.chinese)
+        if self.consecutive_wrong == 2:
+            self.feedback_lbl.text = '最后一次机会！'
+            self.input_txt.text = ''
+            self.input_txt.focus = True
+            self.start_timer()
+            return
 
-        if self.total_wrong >= 3:
+        add_wrong_word(self.data, self.book_id, self.lesson_num,
+                      word_text, self.current_word.phonetic, self.current_word.chinese)
+        add_to_review_queue(self.data, self.book_id, self.lesson_num,
+                           word_text, self.current_word.phonetic, self.current_word.chinese)
+
+        if self.stars_lost >= 3:
             save_user(App.get_running_app().current_user, self.data)
-            self.feedback_lbl.text = '失败！错3次，退出本课'
+            self.feedback_lbl.text = '失败！错3个词，退出本课'
             Clock.schedule_once(lambda _: self.exit_lesson(), 1.5)
             return
 
         weight, _, _ = get_word_weight(self.data, self.book_id, self.lesson_num, word_text)
         set_word_weight(self.data, self.book_id, self.lesson_num, word_text, min(2.0, weight * 1.3))
+        self.phonetic_lbl.text = ''
+        self.phonetic_lbl.opacity = 0
+        self.consecutive_wrong = 0
         self.word_queue.append(self.current_word)
         shuffle(self.word_queue)
         self.current_word = self.word_queue.pop(0)
@@ -479,6 +492,7 @@ class GameScreen(Screen):
         self.stop_timer()
         self.chinese_lbl.text = '再接再厉！'
         self.chinese_lbl.opacity = 1
+        self.phonetic_lbl.text = ''
         self.phonetic_lbl.opacity = 0
         self.input_txt.disabled = True
         Clock.schedule_once(lambda _: setattr(self.manager, 'current', 'lesson_select'), 1)
@@ -487,9 +501,9 @@ class GameScreen(Screen):
         self.stop_timer()
         self.lesson_complete = True
         self.chinese_lbl.opacity = 1
-        if self.total_wrong == 0:
+        if self.stars_lost == 0:
             stars = 3
-        elif self.total_wrong <= 2:
+        elif self.stars_lost <= 2:
             stars = 2
         else:
             stars = 1
@@ -511,7 +525,7 @@ class GameScreen(Screen):
         self.phonetic_lbl.text = ''
         self.phonetic_lbl.opacity = 0
         self.input_txt.disabled = True
-        self.feedback_lbl.text = f'正确{self.total_correct}次，错误{self.total_wrong}次，获得{"*" * stars}'
+        self.feedback_lbl.text = f'正确{self.total_correct}次，错误{self.stars_lost}次，获得{"*" * stars}'
 
     def go_back(self):
         self.stop_timer()
