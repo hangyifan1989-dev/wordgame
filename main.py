@@ -283,10 +283,15 @@ class GameScreen(Screen):
 
     def setup_ui(self):
         outer = BoxLayout(orientation='vertical', padding=dp(30), spacing=dp(10))
-        outer.add_widget(Button(text='< 退出本课', font_size=sp(14), size_hint_y=None, height=dp(35),
-                                 background_color=(0.7,0.7,0.7,0.5), color=C_TEXT,
-                                 on_press=lambda _: self.go_back()))
-        outer.add_widget(Widget(size_hint_y=None, height=dp(20)))
+        top = BoxLayout(size_hint_y=None, height=dp(35), spacing=dp(10))
+        top.add_widget(Button(text='< 退出本课', font_size=sp(14), size_hint_x=0.5,
+                               background_color=(0.7,0.7,0.7,0.5), color=C_TEXT,
+                               on_press=lambda _: self.go_back()))
+        self.timer_lbl = Label(text='', font_size=sp(18), bold=True, color=C_PRIMARY,
+                                size_hint_x=0.5, halign='right', valign='middle')
+        top.add_widget(self.timer_lbl)
+        outer.add_widget(top)
+        outer.add_widget(Widget(size_hint_y=None, height=dp(15)))
         self.chinese_lbl = Label(text='', font_size=sp(36), bold=True, color=C_TEXT, size_hint_y=None, height=dp(100))
         outer.add_widget(self.chinese_lbl)
         self.phonetic_lbl = Label(text='', font_size=sp(24), color=(0.6,0.4,0.8,1),
@@ -309,8 +314,34 @@ class GameScreen(Screen):
         self.total_wrong = 0
         self.total_correct = 0
         self.lesson_complete = False
+        self.timer_event = None
+        self.time_left = 40
         self.input_txt.disabled = False
         self.next_word()
+
+    def start_timer(self):
+        self.stop_timer()
+        self.time_left = 40
+        self.timer_lbl.text = f'⏱ {self.time_left}s'
+        self.timer_event = Clock.schedule_interval(self.tick, 1)
+
+    def stop_timer(self):
+        if self.timer_event:
+            self.timer_event.cancel()
+            self.timer_event = None
+
+    def tick(self, dt):
+        self.time_left -= 1
+        self.timer_lbl.text = f'⏱ {self.time_left}s'
+        if self.time_left <= 10:
+            self.timer_lbl.color = C_RED
+        if self.time_left <= 0:
+            self.stop_timer()
+            self.on_timeout()
+
+    def on_timeout(self):
+        self.feedback_lbl.text = '⏰ 时间到！'
+        self.on_wrong()
 
     def build_weighted_queue(self):
         queue = []
@@ -334,6 +365,7 @@ class GameScreen(Screen):
         self.input_txt.text = ''
         self.feedback_lbl.text = ''
         self.input_txt.focus = True
+        self.start_timer()
 
     def check_answer(self):
         if self.lesson_complete or not self.current_word:
@@ -364,12 +396,14 @@ class GameScreen(Screen):
                        new_weight, review_dates)
         save_user(app.current_user, self.data)
         self.input_txt.text = ''
+        self.stop_timer()
         Clock.schedule_once(self.next_word, 0.8)
 
     def on_wrong(self):
         self.consecutive_wrong += 1
         self.total_wrong += 1
         record_wrong_attempt(self.data, self.book_id, self.lesson_num, self.current_word.word)
+        self.stop_timer()
         if self.consecutive_wrong == 1:
             self.phonetic_lbl.text = f'[音标] {self.current_word.phonetic}'
             self.phonetic_lbl.opacity = 1
@@ -384,7 +418,7 @@ class GameScreen(Screen):
             Clock.schedule_once(self.next_word, 1.2)
             return
         else:
-            self.feedback_lbl.text = f'不正确(连续错{self.consecutive_wrong}次）'
+            self.feedback_lbl.text = f'不正确(连续错{self.consecutive_wrong}次)'
         weight, _, _ = get_word_weight(self.data, self.book_id, self.lesson_num, self.current_word.word)
         set_word_weight(self.data, self.book_id, self.lesson_num, self.current_word.word, min(2.0, weight * 1.3))
         self.word_queue.append(self.current_word)
@@ -393,8 +427,10 @@ class GameScreen(Screen):
         self.chinese_lbl.text = self.current_word.chinese
         self.input_txt.text = ''
         self.input_txt.focus = True
+        self.start_timer()
 
     def finish_lesson(self):
+        self.stop_timer()
         self.lesson_complete = True
         if self.total_wrong == 0:
             stars = 3
@@ -423,6 +459,7 @@ class GameScreen(Screen):
         self.feedback_lbl.text = f'正确{self.total_correct}次，错误{self.total_wrong}次，获得{"*" * stars}'
 
     def go_back(self):
+        self.stop_timer()
         self.input_txt.disabled = False
         self.manager.current = 'lesson_select'
 
@@ -466,13 +503,20 @@ class WrongWordGameScreen(Screen):
         self.info = App.get_running_app().wrong_word_review
         self.data = load_user(App.get_running_app().current_user)
         self.consecutive_correct = 0
+        self.timer_event = None
+        self.time_left = 40
         self.setup_ui()
 
     def setup_ui(self):
         outer = BoxLayout(orientation='vertical', padding=dp(30), spacing=dp(10))
-        outer.add_widget(Button(text='< 返回错词库', font_size=sp(14), size_hint_y=None, height=dp(35),
-                                 background_color=(0.7,0.7,0.7,0.5), color=C_TEXT,
-                                 on_press=lambda _: setattr(self.manager, 'current', 'wrong_words')))
+        top = BoxLayout(size_hint_y=None, height=dp(35), spacing=dp(10))
+        top.add_widget(Button(text='< 返回', font_size=sp(14), size_hint_x=0.5,
+                               background_color=(0.7,0.7,0.7,0.5), color=C_TEXT,
+                               on_press=lambda _: setattr(self.manager, 'current', 'wrong_words')))
+        self.timer_lbl = Label(text='', font_size=sp(18), bold=True, color=C_PRIMARY,
+                                size_hint_x=0.5, halign='right', valign='middle')
+        top.add_widget(self.timer_lbl)
+        outer.add_widget(top)
         self.chinese_lbl = Label(text=self.info['chinese'], font_size=sp(36), bold=True, color=C_TEXT,
                                   size_hint_y=None, height=dp(100))
         outer.add_widget(self.chinese_lbl)
@@ -487,6 +531,36 @@ class WrongWordGameScreen(Screen):
         self.feedback_lbl = Label(text='', font_size=sp(18), color=C_SUBTEXT, size_hint_y=None, height=dp(60))
         outer.add_widget(self.feedback_lbl)
         self.add_widget(outer)
+        self.start_timer()
+
+    def start_timer(self):
+        self.stop_timer()
+        self.time_left = 40
+        self.timer_lbl.text = f'⏱ {self.time_left}s'
+        self.timer_event = Clock.schedule_interval(self.tick, 1)
+
+    def stop_timer(self):
+        if self.timer_event:
+            self.timer_event.cancel()
+            self.timer_event = None
+
+    def tick(self, dt):
+        self.time_left -= 1
+        self.timer_lbl.text = f'⏱ {self.time_left}s'
+        if self.time_left <= 10:
+            self.timer_lbl.color = C_RED
+        if self.time_left <= 0:
+            self.stop_timer()
+            self.on_timeout()
+
+    def on_timeout(self):
+        self.feedback_lbl.text = '时间到！'
+        self.consecutive_correct = 0
+        self.phonetic_lbl.text = f'[音标] {self.info["phonetic"]}'
+        self.phonetic_lbl.opacity = 1
+        self.input_txt.text = ''
+        self.input_txt.focus = True
+        self.start_timer()
 
     def check_answer(self):
         user_input = self.input_txt.text.strip().lower()
@@ -494,6 +568,7 @@ class WrongWordGameScreen(Screen):
         if user_input == correct:
             self.consecutive_correct += 1
             if self.consecutive_correct >= 2:
+                self.stop_timer()
                 record_correct_attempt(self.data, self.info['book_id'], self.info['lesson'], self.info['word'])
                 save_user(App.get_running_app().current_user, self.data)
                 self.feedback_lbl.text = '连续对两次！已复活！'
@@ -501,6 +576,7 @@ class WrongWordGameScreen(Screen):
             else:
                 self.feedback_lbl.text = f'正确！还需再对一次({self.consecutive_correct}/2）'
                 self.input_txt.text = ''
+                self.stop_timer()
                 Clock.schedule_once(lambda _: self.reset_round(), 1)
         else:
             self.consecutive_correct = 0
@@ -509,6 +585,7 @@ class WrongWordGameScreen(Screen):
             self.feedback_lbl.text = '不正确，重新开始计数'
             self.input_txt.text = ''
             self.input_txt.focus = True
+            self.start_timer()
 
     def reset_round(self):
         self.input_txt.text = ''
@@ -516,6 +593,7 @@ class WrongWordGameScreen(Screen):
         self.phonetic_lbl.text = ''
         self.phonetic_lbl.opacity = 0
         self.input_txt.focus = True
+        self.start_timer()
 
 class ReviewScreen(Screen):
     def on_enter(self):
