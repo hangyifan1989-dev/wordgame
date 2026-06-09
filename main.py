@@ -328,6 +328,7 @@ class GameScreen(Screen):
         self.timer_event = None
         self.time_left = 40
         self.input_txt.disabled = False
+        self.star_lost_words = set()
         self.update_hp()
         self.update_score()
         self.next_word()
@@ -435,10 +436,13 @@ class GameScreen(Screen):
 
     def on_wrong(self):
         self.consecutive_wrong += 1
-        self.total_wrong += 1
-        record_wrong_attempt(self.data, self.book_id, self.lesson_num, self.current_word.word)
+        word_text = self.current_word.word
+        if word_text not in self.star_lost_words:
+            self.star_lost_words.add(word_text)
+            self.total_wrong += 1
+            self.update_hp()
+        record_wrong_attempt(self.data, self.book_id, self.lesson_num, word_text)
         self.stop_timer()
-        self.update_hp()
 
         if self.consecutive_wrong == 1:
             self.phonetic_lbl.text = self.current_word.phonetic
@@ -449,9 +453,9 @@ class GameScreen(Screen):
 
         if self.consecutive_wrong >= 3:
             add_wrong_word(self.data, self.book_id, self.lesson_num,
-                          self.current_word.word, self.current_word.phonetic, self.current_word.chinese)
+                          word_text, self.current_word.phonetic, self.current_word.chinese)
             add_to_review_queue(self.data, self.book_id, self.lesson_num,
-                               self.current_word.word, self.current_word.phonetic, self.current_word.chinese)
+                               word_text, self.current_word.phonetic, self.current_word.chinese)
 
         if self.total_wrong >= 3:
             save_user(App.get_running_app().current_user, self.data)
@@ -459,8 +463,8 @@ class GameScreen(Screen):
             Clock.schedule_once(lambda _: self.exit_lesson(), 1.5)
             return
 
-        weight, _, _ = get_word_weight(self.data, self.book_id, self.lesson_num, self.current_word.word)
-        set_word_weight(self.data, self.book_id, self.lesson_num, self.current_word.word, min(2.0, weight * 1.3))
+        weight, _, _ = get_word_weight(self.data, self.book_id, self.lesson_num, word_text)
+        set_word_weight(self.data, self.book_id, self.lesson_num, word_text, min(2.0, weight * 1.3))
         self.word_queue.append(self.current_word)
         shuffle(self.word_queue)
         self.current_word = self.word_queue.pop(0)
@@ -473,11 +477,16 @@ class GameScreen(Screen):
 
     def exit_lesson(self):
         self.stop_timer()
-        self.manager.current = 'lesson_select'
+        self.chinese_lbl.text = '再接再厉！'
+        self.chinese_lbl.opacity = 1
+        self.phonetic_lbl.opacity = 0
+        self.input_txt.disabled = True
+        Clock.schedule_once(lambda _: setattr(self.manager, 'current', 'lesson_select'), 1)
 
     def finish_lesson(self):
         self.stop_timer()
         self.lesson_complete = True
+        self.chinese_lbl.opacity = 1
         if self.total_wrong == 0:
             stars = 3
         elif self.total_wrong <= 2:
