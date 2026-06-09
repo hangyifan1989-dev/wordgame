@@ -10,7 +10,15 @@ MAX_USERS = 10
 REVIEW_INTERVALS = [1, 3, 7, 15, 30]
 
 def init():
-    USERS_DIR.mkdir(exist_ok=True)
+    global USERS_DIR
+    try:
+        from kivy.app import App
+        app = App.get_running_app()
+        if app:
+            USERS_DIR = Path(app.user_data_dir) / "users"
+    except Exception:
+        pass
+    USERS_DIR.mkdir(parents=True, exist_ok=True)
 
 def get_user_list():
     files = list(USERS_DIR.glob("*.json"))

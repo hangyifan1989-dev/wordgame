@@ -2,6 +2,7 @@ import sys
 from pathlib import Path
 from random import shuffle
 from datetime import date, timedelta
+import platform
 
 from kivy.config import Config
 Config.set('kivy', 'exit_on_escape', '0')
@@ -9,9 +10,13 @@ Config.set('graphics', 'width', '800')
 Config.set('graphics', 'height', '600')
 
 from kivy.core.text import LabelBase
-LabelBase.register(name='Roboto', fn_regular='C:\\Windows\\Fonts\\msyh.ttc')
-LabelBase.register(name='RobotoMono', fn_regular='C:\\Windows\\Fonts\\msyh.ttc')
-LabelBase.register(name='IPAFont', fn_regular='C:\\Windows\\Fonts\\Arial.ttf')
+if platform.system() == 'Windows':
+    try:
+        LabelBase.register(name='Roboto', fn_regular='C:\\Windows\\Fonts\\msyh.ttc')
+        LabelBase.register(name='RobotoMono', fn_regular='C:\\Windows\\Fonts\\msyh.ttc')
+        LabelBase.register(name='IPAFont', fn_regular='C:\\Windows\\Fonts\\Arial.ttf')
+    except Exception:
+        pass
 
 from kivy.animation import Animation
 
@@ -45,6 +50,26 @@ C_SECONDARY = (1.0, 0.75, 0.10, 1)
 C_RED = (0.9, 0.25, 0.2, 1)
 C_GREEN = (0.3, 0.8, 0.5, 1)
 C_GOLD = (1, 0.85, 0, 1)
+
+# ── Cross-platform TTS ──
+def speak_text(text):
+    try:
+        import platform
+        if platform.system() == 'Windows':
+            import win32com.client
+            import threading
+            def _speak():
+                sp = win32com.client.Dispatch('SAPI.SpVoice')
+                sp.Rate = 0
+                sp.Volume = 100
+                sp.Speak(text, 0)
+            t = threading.Thread(target=_speak, daemon=True)
+            t.start()
+        else:
+            from plyer import tts
+            tts.speak(text)
+    except Exception:
+        pass
 
 def add_bg(widget, color=C_BG):
     with widget.canvas.before:
@@ -282,6 +307,9 @@ class GameScreen(Screen):
         self.data = load_user(app.current_user)
         self.words = get_lesson_words(self.book_id, self.lesson_num)
         self.score_per_word = get_score_per_word(self.book_id, self.lesson_num)
+        lk = f'book{self.book_id}_lesson{self.lesson_num}'
+        if self.data.get('lesson_stars', {}).get(lk, 0) > 0:
+            self.score_per_word *= 0.1
         self.setup_ui()
         self.setup_game()
 
@@ -292,13 +320,16 @@ class GameScreen(Screen):
                                background_color=(0.7,0.7,0.7,0.5), color=C_TEXT,
                                on_press=lambda _: self.go_back()))
         self.hp_lbl = Label(text='', font_size=sp(20), bold=True, color=C_GOLD,
-                             size_hint_x=0.3, halign='center', valign='middle')
+                             size_hint_x=0.2, halign='center', valign='middle')
         top.add_widget(self.hp_lbl)
-        self.score_lbl = Label(text='', font_size=sp(16), color=C_TEXT,
-                                size_hint_x=0.3, halign='center', valign='middle')
+        self.progress_lbl = Label(text='', font_size=sp(14), color=C_SUBTEXT,
+                                  size_hint_x=0.3, halign='center', valign='middle')
+        top.add_widget(self.progress_lbl)
+        self.score_lbl = Label(text='', font_size=sp(14), color=C_TEXT,
+                                size_hint_x=0.2, halign='center', valign='middle')
         top.add_widget(self.score_lbl)
         self.timer_lbl = Label(text='', font_size=sp(18), bold=True, color=C_PRIMARY,
-                                size_hint_x=0.2, halign='right', valign='middle')
+                                size_hint_x=0.1, halign='right', valign='middle')
         top.add_widget(self.timer_lbl)
         outer.add_widget(top)
         outer.add_widget(Widget(size_hint_y=None, height=dp(10)))
@@ -319,17 +350,26 @@ class GameScreen(Screen):
         self.add_widget(outer)
 
     def setup_game(self):
+        try:
+            import ctypes
+            ctypes.windll.user32.LoadKeyboardLayoutW('00000409', 1)
+        except Exception:
+            pass
         self.word_queue = self.build_weighted_queue()
         self.current_word = None
         self.consecutive_wrong = 0
         self.stars_lost = 0
         self.star_lost_words = set()
         self.total_correct = 0
+        self.completed_words = set()
+        self.scored_words = set()
+        self.total_words = len(self.words)
         self.lesson_complete = False
         self.timer_event = None
         self.time_left = 40
         self.input_txt.disabled = False
         self.update_hp()
+        self.update_progress()
         self.update_score()
         self.next_word()
 
@@ -349,6 +389,10 @@ class GameScreen(Screen):
             self.score_lbl.text = f'积分:{int(total)}'
         else:
             self.score_lbl.text = f'积分:{total:.1f}'
+
+    def update_progress(self):
+        done = len(self.completed_words)
+        self.progress_lbl.text = f'\u5df2\u5b8c\u6210 {done}/{self.total_words}'
 
     def start_timer(self):
         self.stop_timer()
@@ -414,15 +458,25 @@ class GameScreen(Screen):
     def on_correct(self):
         self.consecutive_wrong = 0
         self.total_correct += 1
-        score = self.score_per_word
+        self.completed_words.add(self.current_word.word)
+        self.update_progress()
+        self.input_txt.background_color = (0.3, 0.9, 0.5, 0.4)
+        Clock.schedule_once(lambda _: setattr(self.input_txt, 'background_color', (1, 1, 1, 1)), 0.5)
         app = App.get_running_app()
-        is_ww = is_in_wrong_words(self.data, self.book_id, self.lesson_num, self.current_word.word)
+        word_text = self.current_word.word
+        is_ww = is_in_wrong_words(self.data, self.book_id, self.lesson_num, word_text)
         if is_ww:
-            revived = record_correct_attempt(self.data, self.book_id, self.lesson_num, self.current_word.word)
-            self.feedback_lbl.text = '正确！已从错词库复活！' if revived else '正确！还需再对一次才能复活'
+            revived = record_correct_attempt(self.data, self.book_id, self.lesson_num, word_text)
+        if word_text not in self.scored_words:
+            self.scored_words.add(word_text)
+            score = self.score_per_word
+            self.data['total_score'] = self.data.get('total_score', 0) + score
+            if is_ww:
+                self.feedback_lbl.text = '正确！已从错词库复活！' if revived else '正确！还需再对一次才能复活'
+            else:
+                self.feedback_lbl.text = f'正确！+{score}分'
         else:
-            self.feedback_lbl.text = f'正确！+{score}分'
-        self.data['total_score'] = self.data.get('total_score', 0) + score
+            self.feedback_lbl.text = '正确！（已获得过积分）'
         weight, _, _ = get_word_weight(self.data, self.book_id, self.lesson_num, self.current_word.word)
         new_weight = max(0.1, weight * 0.8)
         review_dates = [str(date.today() + timedelta(days=i)) for i in REVIEW_INTERVALS]
@@ -437,6 +491,8 @@ class GameScreen(Screen):
     def on_wrong(self):
         self.consecutive_wrong += 1
         word_text = self.current_word.word
+        self.input_txt.background_color = (0.9, 0.2, 0.2, 0.4)
+        Clock.schedule_once(lambda _: setattr(self.input_txt, 'background_color', (1, 1, 1, 1)), 0.5)
 
         if word_text not in self.star_lost_words:
             self.star_lost_words.add(word_text)
@@ -450,15 +506,16 @@ class GameScreen(Screen):
             self.phonetic_lbl.text = self.current_word.phonetic
             self.phonetic_lbl.opacity = 1
             self.feedback_lbl.text = '再想想！看音标提示'
+            speak_text(self.current_word.word)
             self.input_txt.text = ''
-            self.input_txt.focus = True
+            Clock.schedule_once(lambda _: setattr(self.input_txt, 'focus', True))
             self.start_timer()
             return
 
         if self.consecutive_wrong == 2:
             self.feedback_lbl.text = '最后一次机会！'
             self.input_txt.text = ''
-            self.input_txt.focus = True
+            Clock.schedule_once(lambda _: setattr(self.input_txt, 'focus', True))
             self.start_timer()
             return
 
@@ -469,24 +526,17 @@ class GameScreen(Screen):
 
         if self.stars_lost >= 3:
             save_user(App.get_running_app().current_user, self.data)
-            self.feedback_lbl.text = '失败！错3个词，退出本课'
-            Clock.schedule_once(lambda _: self.exit_lesson(), 1.5)
+            self.feedback_lbl.text = f'失败！正确拼写: {word_text}'
+            Clock.schedule_once(lambda _: self.exit_lesson(), 3)
             return
 
+        self.feedback_lbl.text = f'正确拼写: {word_text}'
         weight, _, _ = get_word_weight(self.data, self.book_id, self.lesson_num, word_text)
         set_word_weight(self.data, self.book_id, self.lesson_num, word_text, min(2.0, weight * 1.3))
         self.phonetic_lbl.text = ''
         self.phonetic_lbl.opacity = 0
         self.consecutive_wrong = 0
-        self.word_queue.append(self.current_word)
-        shuffle(self.word_queue)
-        self.current_word = self.word_queue.pop(0)
-        self.chinese_lbl.text = self.current_word.chinese
-        self.chinese_lbl.opacity = 0
-        Animation(opacity=1, duration=0.25).start(self.chinese_lbl)
-        self.input_txt.text = ''
-        self.input_txt.focus = True
-        self.start_timer()
+        Clock.schedule_once(lambda _: self.next_word(), 3)
 
     def exit_lesson(self):
         self.stop_timer()
@@ -653,7 +703,7 @@ class WrongWordGameScreen(Screen):
             self.phonetic_lbl.opacity = 1
             self.feedback_lbl.text = '不正确，重新开始计数'
             self.input_txt.text = ''
-            self.input_txt.focus = True
+            Clock.schedule_once(lambda _: setattr(self.input_txt, 'focus', True))
             self.start_timer()
 
     def reset_round(self):
