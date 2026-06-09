@@ -44,6 +44,7 @@ C_PRIMARY = (0.25, 0.60, 0.95, 1)
 C_SECONDARY = (1.0, 0.75, 0.10, 1)
 C_RED = (0.9, 0.25, 0.2, 1)
 C_GREEN = (0.3, 0.8, 0.5, 1)
+C_GOLD = (1, 0.85, 0, 1)
 
 def add_bg(widget, color=C_BG):
     with widget.canvas.before:
@@ -285,28 +286,35 @@ class GameScreen(Screen):
         self.setup_game()
 
     def setup_ui(self):
-        outer = BoxLayout(orientation='vertical', padding=dp(30), spacing=dp(10))
-        top = BoxLayout(size_hint_y=None, height=dp(35), spacing=dp(10))
-        top.add_widget(Button(text='< 退出本课', font_size=sp(14), size_hint_x=0.5,
+        outer = BoxLayout(orientation='vertical', padding=dp(20), spacing=dp(8))
+        top = BoxLayout(size_hint_y=None, height=dp(35), spacing=dp(8))
+        top.add_widget(Button(text='< 退出', font_size=sp(14), size_hint_x=0.2,
                                background_color=(0.7,0.7,0.7,0.5), color=C_TEXT,
                                on_press=lambda _: self.go_back()))
+        self.hp_lbl = Label(text='', font_size=sp(20), bold=True, color=C_GOLD,
+                             size_hint_x=0.3, halign='center', valign='middle')
+        top.add_widget(self.hp_lbl)
+        self.score_lbl = Label(text='', font_size=sp(16), color=C_TEXT,
+                                size_hint_x=0.3, halign='center', valign='middle')
+        top.add_widget(self.score_lbl)
         self.timer_lbl = Label(text='', font_size=sp(18), bold=True, color=C_PRIMARY,
-                                size_hint_x=0.5, halign='right', valign='middle')
+                                size_hint_x=0.2, halign='right', valign='middle')
         top.add_widget(self.timer_lbl)
         outer.add_widget(top)
-        outer.add_widget(Widget(size_hint_y=None, height=dp(15)))
-        self.chinese_lbl = Label(text='', font_size=sp(36), bold=True, color=C_TEXT, size_hint_y=None, height=dp(100), opacity=1)
-        outer.add_widget(self.chinese_lbl)
-        self.phonetic_lbl = Label(text='', font_size=sp(24), color=(0.6,0.4,0.8,1),
-                                   size_hint_y=None, height=dp(50), opacity=0, font_name='IPAFont')
-        outer.add_widget(self.phonetic_lbl)
         outer.add_widget(Widget(size_hint_y=None, height=dp(10)))
+        self.chinese_lbl = Label(text='', font_size=sp(36), bold=True, color=C_TEXT,
+                                  size_hint_y=None, height=dp(100), opacity=1)
+        outer.add_widget(self.chinese_lbl)
+        self.phonetic_lbl = Label(text='', font_size=sp(22), color=(0.6,0.4,0.8,1),
+                                   size_hint_y=None, height=dp(45), opacity=0, font_name='IPAFont')
+        outer.add_widget(self.phonetic_lbl)
+        outer.add_widget(Widget(size_hint_y=None, height=dp(8)))
         self.input_txt = TextInput(hint_text='输入英文拼写...', font_size=sp(28), multiline=False,
-                                    size_hint_y=None, height=dp(80), padding=[dp(15), dp(15)])
+                                    size_hint_y=None, height=dp(70), padding=[dp(15), dp(10)])
         self.input_txt.bind(on_text_validate=lambda _: self.check_answer())
         outer.add_widget(self.input_txt)
         outer.add_widget(CButton('确认', on_press=lambda _: self.check_answer()))
-        self.feedback_lbl = Label(text='', font_size=sp(18), color=C_SUBTEXT, size_hint_y=None, height=dp(60))
+        self.feedback_lbl = Label(text='', font_size=sp(18), color=C_SUBTEXT, size_hint_y=None, height=dp(50))
         outer.add_widget(self.feedback_lbl)
         self.add_widget(outer)
 
@@ -320,7 +328,26 @@ class GameScreen(Screen):
         self.timer_event = None
         self.time_left = 40
         self.input_txt.disabled = False
+        self.update_hp()
+        self.update_score()
         self.next_word()
+
+    def update_hp(self):
+        remaining = 3 - self.total_wrong
+        self.hp_lbl.text = '*' * remaining + '-' * (3 - remaining)
+        if remaining == 0:
+            self.hp_lbl.color = C_RED
+        elif remaining <= 1:
+            self.hp_lbl.color = C_SECONDARY
+        else:
+            self.hp_lbl.color = C_GREEN
+
+    def update_score(self):
+        total = self.data.get('total_score', 0)
+        if total == int(total):
+            self.score_lbl.text = f'积分:{int(total)}'
+        else:
+            self.score_lbl.text = f'积分:{total:.1f}'
 
     def start_timer(self):
         self.stop_timer()
@@ -343,7 +370,7 @@ class GameScreen(Screen):
             self.on_timeout()
 
     def on_timeout(self):
-        self.feedback_lbl.text = '⏰ 时间到！'
+        self.feedback_lbl.text = '时间到！'
         self.on_wrong()
 
     def build_weighted_queue(self):
@@ -403,6 +430,7 @@ class GameScreen(Screen):
         save_user(app.current_user, self.data)
         self.input_txt.text = ''
         self.stop_timer()
+        self.update_score()
         Clock.schedule_once(self.next_word, 0.8)
 
     def on_wrong(self):
@@ -410,30 +438,42 @@ class GameScreen(Screen):
         self.total_wrong += 1
         record_wrong_attempt(self.data, self.book_id, self.lesson_num, self.current_word.word)
         self.stop_timer()
+        self.update_hp()
+
         if self.consecutive_wrong == 1:
-            self.phonetic_lbl.text = f'[音标] {self.current_word.phonetic}'
+            self.phonetic_lbl.text = self.current_word.phonetic
             self.phonetic_lbl.opacity = 1
             self.feedback_lbl.text = '再想想！看音标提示'
-        elif self.consecutive_wrong >= 3:
+        else:
+            self.feedback_lbl.text = f'不正确(连续错{self.consecutive_wrong}次)'
+
+        if self.consecutive_wrong >= 3:
             add_wrong_word(self.data, self.book_id, self.lesson_num,
                           self.current_word.word, self.current_word.phonetic, self.current_word.chinese)
             add_to_review_queue(self.data, self.book_id, self.lesson_num,
                                self.current_word.word, self.current_word.phonetic, self.current_word.chinese)
-            self.feedback_lbl.text = f'已移入错词库！正确答案: {self.current_word.word}'
+
+        if self.total_wrong >= 3:
             save_user(App.get_running_app().current_user, self.data)
-            Clock.schedule_once(self.next_word, 1.2)
+            self.feedback_lbl.text = '失败！错3次，退出本课'
+            Clock.schedule_once(lambda _: self.exit_lesson(), 1.5)
             return
-        else:
-            self.feedback_lbl.text = f'不正确(连续错{self.consecutive_wrong}次)'
+
         weight, _, _ = get_word_weight(self.data, self.book_id, self.lesson_num, self.current_word.word)
         set_word_weight(self.data, self.book_id, self.lesson_num, self.current_word.word, min(2.0, weight * 1.3))
         self.word_queue.append(self.current_word)
         shuffle(self.word_queue)
         self.current_word = self.word_queue.pop(0)
         self.chinese_lbl.text = self.current_word.chinese
+        self.chinese_lbl.opacity = 0
+        Animation(opacity=1, duration=0.25).start(self.chinese_lbl)
         self.input_txt.text = ''
         self.input_txt.focus = True
         self.start_timer()
+
+    def exit_lesson(self):
+        self.stop_timer()
+        self.manager.current = 'lesson_select'
 
     def finish_lesson(self):
         self.stop_timer()
@@ -562,7 +602,7 @@ class WrongWordGameScreen(Screen):
     def on_timeout(self):
         self.feedback_lbl.text = '时间到！'
         self.consecutive_correct = 0
-        self.phonetic_lbl.text = f'[音标] {self.info["phonetic"]}'
+        self.phonetic_lbl.text = self.info.get("phonetic", '')
         self.phonetic_lbl.opacity = 1
         self.input_txt.text = ''
         self.input_txt.focus = True
@@ -586,7 +626,7 @@ class WrongWordGameScreen(Screen):
                 Clock.schedule_once(lambda _: self.reset_round(), 1)
         else:
             self.consecutive_correct = 0
-            self.phonetic_lbl.text = f'[音标] {self.info["phonetic"]}'
+            self.phonetic_lbl.text = self.info.get("phonetic", '')
             self.phonetic_lbl.opacity = 1
             self.feedback_lbl.text = '不正确，重新开始计数'
             self.input_txt.text = ''
@@ -663,7 +703,7 @@ class ReviewScreen(Screen):
             self.review_index += 1
             Clock.schedule_once(lambda _: self.show_next(), 0.8)
         else:
-            self.phonetic_lbl.text = f'[音标] {self.current_review.get("phonetic", "")}'
+            self.phonetic_lbl.text = self.current_review.get("phonetic", "")
             self.phonetic_lbl.opacity = 1
             self.feedback_lbl.text = f'不正确，正确答案: {correct}'
             self.review_index += 1
