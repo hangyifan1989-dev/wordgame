@@ -14,7 +14,7 @@ version = 0.13
 # version.regex =
 # version.filename =
 
-requirements = python3,kivy,plyer,openpyxl
+requirements = python3,kivy,plyer
 
 presplash.filename =
 icon.filename =
@@ -25,10 +25,9 @@ osx.package_name = WordGame
 android.permissions = INTERNET
 android.api = 34
 android.minapi = 21
-android.ndk = 27
-android.sdk = 34
-android.bootstrap = sdl2
-android.gradle_dependencies =
+android.ndk = 28c
+p4a.bootstrap = sdl2
+# android.gradle_dependencies =
 
 android.archs = arm64-v8a
 android.entitlements =
@@ -46,5 +45,5 @@ ios.simulator = False
 
 [buildozer]
 
-log_level = 1
+log_level = 2
 warn_on_root = 1
