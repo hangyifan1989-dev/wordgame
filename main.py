@@ -11,6 +11,9 @@ Config.set('graphics', 'height', '600')
 from kivy.core.text import LabelBase
 LabelBase.register(name='Roboto', fn_regular='C:\\Windows\\Fonts\\msyh.ttc')
 LabelBase.register(name='RobotoMono', fn_regular='C:\\Windows\\Fonts\\msyh.ttc')
+LabelBase.register(name='IPAFont', fn_regular='C:\\Windows\\Fonts\\Arial.ttf')
+
+from kivy.animation import Animation
 
 from kivy.app import App
 from kivy.uix.screenmanager import ScreenManager, Screen
@@ -292,10 +295,10 @@ class GameScreen(Screen):
         top.add_widget(self.timer_lbl)
         outer.add_widget(top)
         outer.add_widget(Widget(size_hint_y=None, height=dp(15)))
-        self.chinese_lbl = Label(text='', font_size=sp(36), bold=True, color=C_TEXT, size_hint_y=None, height=dp(100))
+        self.chinese_lbl = Label(text='', font_size=sp(36), bold=True, color=C_TEXT, size_hint_y=None, height=dp(100), opacity=1)
         outer.add_widget(self.chinese_lbl)
         self.phonetic_lbl = Label(text='', font_size=sp(24), color=(0.6,0.4,0.8,1),
-                                   size_hint_y=None, height=dp(50), opacity=0)
+                                   size_hint_y=None, height=dp(50), opacity=0, font_name='IPAFont')
         outer.add_widget(self.phonetic_lbl)
         outer.add_widget(Widget(size_hint_y=None, height=dp(10)))
         self.input_txt = TextInput(hint_text='输入英文拼写...', font_size=sp(28), multiline=False,
@@ -322,7 +325,7 @@ class GameScreen(Screen):
     def start_timer(self):
         self.stop_timer()
         self.time_left = 40
-        self.timer_lbl.text = f'⏱ {self.time_left}s'
+        self.timer_lbl.text = f'剩余 {self.time_left}s'
         self.timer_event = Clock.schedule_interval(self.tick, 1)
 
     def stop_timer(self):
@@ -332,7 +335,7 @@ class GameScreen(Screen):
 
     def tick(self, dt):
         self.time_left -= 1
-        self.timer_lbl.text = f'⏱ {self.time_left}s'
+        self.timer_lbl.text = f'剩余 {self.time_left}s'
         if self.time_left <= 10:
             self.timer_lbl.color = C_RED
         if self.time_left <= 0:
@@ -359,7 +362,10 @@ class GameScreen(Screen):
             return
         self.current_word = self.word_queue.pop(0)
         self.consecutive_wrong = 0
+        self.chinese_lbl.opacity = 0
         self.chinese_lbl.text = self.current_word.chinese
+        anim = Animation(opacity=1, duration=0.25)
+        anim.start(self.chinese_lbl)
         self.phonetic_lbl.text = ''
         self.phonetic_lbl.opacity = 0
         self.input_txt.text = ''
@@ -536,7 +542,7 @@ class WrongWordGameScreen(Screen):
     def start_timer(self):
         self.stop_timer()
         self.time_left = 40
-        self.timer_lbl.text = f'⏱ {self.time_left}s'
+        self.timer_lbl.text = f'剩余 {self.time_left}s'
         self.timer_event = Clock.schedule_interval(self.tick, 1)
 
     def stop_timer(self):
@@ -546,7 +552,7 @@ class WrongWordGameScreen(Screen):
 
     def tick(self, dt):
         self.time_left -= 1
-        self.timer_lbl.text = f'⏱ {self.time_left}s'
+        self.timer_lbl.text = f'剩余 {self.time_left}s'
         if self.time_left <= 10:
             self.timer_lbl.color = C_RED
         if self.time_left <= 0:
