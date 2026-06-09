@@ -2,3 +2,6 @@ users/
 *.pyc
 __pycache__/
 debug*.txt
+.buildozer/
+bin/
+*.apk
