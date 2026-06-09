@@ -11,8 +11,8 @@ source.exclude_dirs = tests, venv, .env, __pycache__, .git
 source.exclude_patterns = buildozer.spec
 
 version = 0.13
-version.regex =
-version.filename =
+# version.regex =
+# version.filename =
 
 requirements = python3,kivy,plyer,openpyxl
 
@@ -23,10 +23,10 @@ orientation = landscape
 osx.package_name = WordGame
 
 android.permissions = INTERNET
-android.api = 33
+android.api = 34
 android.minapi = 21
-android.ndk = 25b
-android.sdk = 33
+android.ndk = 27
+android.sdk = 34
 android.bootstrap = sdl2
 android.gradle_dependencies =
 
