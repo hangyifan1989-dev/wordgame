@@ -10,14 +10,14 @@ source.exclude_exts = spec
 source.exclude_dirs = tests, venv, .env, __pycache__, .git
 source.exclude_patterns = buildozer.spec
 
-version = 0.12
-version.regex = __version__ = ['"](.*)['"]
-version.filename = %(source.dir)s/main.py
+version = 0.13
+version.regex =
+version.filename =
 
 requirements = python3,kivy,plyer,openpyxl
 
-presplash.filename = %(source.dir)s/icon.png
-icon.filename = %(source.dir)s/icon.png
+presplash.filename =
+icon.filename =
 
 orientation = landscape
 osx.package_name = WordGame
@@ -28,9 +28,9 @@ android.minapi = 21
 android.ndk = 25b
 android.sdk = 33
 android.bootstrap = sdl2
-android.gradle_dependencies = ''
+android.gradle_dependencies =
 
-android.archs = arm64-v8a, armeabi-v7a
+android.archs = arm64-v8a
 android.entitlements =
 android.keyalias =
 android.keystore =
@@ -46,5 +46,5 @@ ios.simulator = False
 
 [buildozer]
 
-log_level = 2
+log_level = 1
 warn_on_root = 1
